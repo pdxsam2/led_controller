@@ -1,21 +1,32 @@
-#![deny(unsafe_code)]
 #![no_std]
 #![no_main]
 
 use panic_halt as _;
 
-// use embedded_hal::digital::v2::OutputPin; //used for LEDS
+// use embedded_hal::digital::v2::OutputPin; //used for DEBUGGING
+use core::mem::MaybeUninit;
+use pac::interrupt;
 use cortex_m_rt::entry;
 use stm32f1xx_hal::{
-	pac, 
+	pac,
+	pac::{Interrupt::EXTI9_5}, 
 	prelude::*, 
 	time::U32Ext,
 	timer::{Timer, Tim2NoRemap},
-	delay::Delay
+	delay::Delay,
+	gpio::*
 };
+
+static mut MODE: MaybeUninit<u8> = MaybeUninit::new(1);
+// static mut COLOR: MaybeUninit<u8> = MaybeUninit::uninit();
+static mut LED: MaybeUninit<stm32f1xx_hal::gpio::gpioc::PC13<Output<PushPull>>> =
+    MaybeUninit::uninit();
+static mut INT_PIN: MaybeUninit<stm32f1xx_hal::gpio::gpioa::PA7<Input<Floating>>> =
+    MaybeUninit::uninit();
 
 #[entry]
 fn main() -> ! {
+	//*** CHIP INIT ***//
 	let p = pac::Peripherals::take().unwrap();
     let cp = cortex_m::Peripherals::take().unwrap();
 
@@ -26,20 +37,37 @@ fn main() -> ! {
 	let mut afio = p.AFIO.constrain(&mut rcc.apb2);
     let mut gpioa = p.GPIOA.split(&mut rcc.apb2);
     
+	//*** PERIPHERALS ***//
+	let mut delay = Delay::new(cp.SYST, clocks);
 
-    
-	let c = gpioa.pa0.into_alternate_push_pull(&mut gpioa.crl);
+	let int_pin = unsafe { &mut *INT_PIN.as_mut_ptr() };
+	*int_pin = gpioa.pa7.into_floating_input(&mut gpioa.crl);
+	int_pin.make_interrupt_source(&mut afio);
+	int_pin.trigger_on_edge(&p.EXTI, Edge::RISING);
+	int_pin.enable_interrupt(&p.EXTI);
+
+	let pa0 = gpioa.pa0.into_alternate_push_pull(&mut gpioa.crl);
 	let pwm = Timer::tim2(p.TIM2, &clocks, &mut rcc.apb1).pwm::<Tim2NoRemap, _, _, _>(
-		c,
+		pa0,
 		&mut afio.mapr,
 		1.khz(),
 	);
-	//	ENABLE THESE FOR DEBUGGING:
-	// let mut gpioc = p.GPIOC.split(&mut rcc.apb2);
-	//	let mut led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
+	//enable for debugging
+	let mut gpioc = p.GPIOC.split(&mut rcc.apb2);
+	// let mut led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
+	let led = unsafe { &mut *LED.as_mut_ptr() };
+    *led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
 
-	let mut delay = Delay::new(cp.SYST, clocks);
+	//*** INTERRUPTS ***//
 
+	let mut nvic = cp.NVIC;
+	unsafe {
+		nvic.set_priority(EXTI9_5, 1);
+		cortex_m::peripheral::NVIC::unmask(EXTI9_5);
+	}
+	cortex_m::peripheral::NVIC::unpend(EXTI9_5);
+
+	//*** VARS ***//
 	let max = pwm.get_max_duty() / 4;
 	let min = 0;
 
@@ -50,31 +78,49 @@ fn main() -> ! {
 	let mut to_add= true;
 	pwm_channel.set_duty(duty_cycle);
 
+	//*** LOOP ***//
     loop {
-		if to_add == true {
-			duty_cycle += 1;
-			if duty_cycle == max {
-				to_add = false;
+		let mode = unsafe { &mut *MODE.as_mut_ptr() };
+		if  *mode == 1 {
+			if to_add == true {
+				duty_cycle += 1;
+				if duty_cycle == max {
+					to_add = false;
+				}
 			}
+			else {
+				duty_cycle -= 1;
+				if duty_cycle == min {
+					to_add = true;
+				}
+			}
+			delay.delay_ms(1_u16);
+			pwm_channel.set_duty(duty_cycle);
+    	}
+		else if *mode == 0 {
+			// delay.delay_ms(100_u16);
+			// led.set_high().unwrap();
+			// delay.delay_ms(100_u16);
+			// led.set_low().unwrap();
+		}
+	}
+}
+
+#[interrupt]
+fn EXTI9_5() {
+	let mode = unsafe { &mut *MODE.as_mut_ptr() };
+	let led = unsafe { &mut *LED.as_mut_ptr() };
+	let int_pin = unsafe { &mut *INT_PIN.as_mut_ptr() };
+
+	if int_pin.check_interrupt() {
+		led.toggle().unwrap();
+		
+		if *mode == 1 {
+			*mode = 0;
 		}
 		else {
-			duty_cycle -= 1;
-			if duty_cycle == min {
-				to_add = true;
-			}
+			*mode = 1;
 		}
-		delay.delay_ms(1_u16);
-		pwm_channel.set_duty(duty_cycle);
-		// delay.delay_ms(1000_u16);
-		// pwm_channel.set_duty(max);
-		// delay.delay_ms(1000_u16);
-		// pwm_channel.set_duty(max/4);
-
-		
-
-        // block!(timer.wait()).unwrap();
-        // led.set_high().unwrap();
-		// block!(timer.wait()).unwrap();
-        // led.set_low().unwrap();
+        int_pin.clear_interrupt_pending_bit();
     }
 }

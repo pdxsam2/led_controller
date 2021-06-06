@@ -1,5 +1,5 @@
 [package]
-name = "pwm"
+name = "led_controller"
 version = "0.1.0"
 authors = ["pdxsam2 <samp2@pdx.edu>"]
 edition = "2018"

@@ -3,34 +3,49 @@
 
 use panic_halt as _;
 //TODO:
-//  clean up imports
 //  README and docs
 //  Organize things into functions?
 //  appease clippy
-use core::mem::MaybeUninit;
-use core::sync::atomic::{AtomicU8, Ordering};
+//  update const_colors
+//  change 'mode' to 'current_mode'
+
 use cortex_m_rt::entry;
-use pac::interrupt;
+use cortex_m::peripheral::SYST;
 use stm32f1xx_hal::{
     delay::Delay,
     gpio::*,
-    pac,
-    pac::Interrupt::{EXTI4, EXTI9_5},
-    pac::TIM2,
+    pac, 
+    pac::{
+        Interrupt::{EXTI4, EXTI9_5},
+        TIM2,
+        interrupt,
+    },
     prelude::*,
     pwm::{PwmChannel, C1, C2, C3},
     time::U32Ext,
     timer::{Tim2NoRemap, Timer},
 };
+use core::{
+    mem::MaybeUninit,
+    sync::atomic::{AtomicU8, Ordering}
+};
 
+///Determines which mode the LED strip is in
 static MODE: AtomicU8 = AtomicU8::new(0);
+///Determines the color of the LED strip
 static COLOR: AtomicU8 = AtomicU8::new(1);
-static mut LED: MaybeUninit<stm32f1xx_hal::gpio::gpioc::PC13<Output<PushPull>>> =
-    MaybeUninit::uninit();
+
+///Interrupt pin used for changing the mode
 static mut MODE_BUTTON: MaybeUninit<stm32f1xx_hal::gpio::gpioa::PA5<Input<Floating>>> =
     MaybeUninit::uninit();
+///Interrupt pin used for changing the color
 static mut COLOR_BUTTON: MaybeUninit<stm32f1xx_hal::gpio::gpioa::PA4<Input<Floating>>> =
     MaybeUninit::uninit();
+
+///Used for debugging
+static mut LED: MaybeUninit<stm32f1xx_hal::gpio::gpioc::PC13<Output<PushPull>>> =
+    MaybeUninit::uninit();
+
 
 #[entry]
 fn main() -> ! {
@@ -45,7 +60,7 @@ fn main() -> ! {
     let mut afio = p.AFIO.constrain(&mut rcc.apb2);
     let mut gpioa = p.GPIOA.split(&mut rcc.apb2);
 
-    //*** PERIPHERALS ***//
+    //*** PERIPHERAL INIT ***//
     let mut delay = Delay::new(cp.SYST, clocks);
 
     let mode_button = unsafe { &mut *MODE_BUTTON.as_mut_ptr() };
@@ -84,7 +99,7 @@ fn main() -> ! {
     cortex_m::peripheral::NVIC::unpend(EXTI9_5);
     cortex_m::peripheral::NVIC::unpend(EXTI4);
 
-    //*** VARS ***//
+    //*** PRIVATE VARS ***//
     let mut pwm_channels = pwm.split();
     pwm_channels.0.enable();
     pwm_channels.1.enable();
@@ -288,6 +303,7 @@ fn const_colors(
     ),
     delay: &mut Delay,
 ) {
+    // let time = SYST::get_current();
     let max = channels.0.get_max_duty();
     let min = 0;
     while MODE.load(Ordering::Relaxed) == mode {

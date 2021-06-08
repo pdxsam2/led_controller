@@ -6,24 +6,24 @@ use panic_halt as _;
 //  demo video
 //  change 'mode' to 'current_mode'
 
+use core::{
+    mem::MaybeUninit,
+    sync::atomic::{AtomicU8, Ordering},
+};
 use cortex_m_rt::entry;
 use stm32f1xx_hal::{
     delay::Delay,
     gpio::*,
-    pac, 
+    pac,
     pac::{
+        interrupt,
         Interrupt::{EXTI4, EXTI9_5},
         TIM2,
-        interrupt,
     },
     prelude::*,
     pwm::{PwmChannel, C1, C2, C3},
     time::U32Ext,
     timer::{Tim2NoRemap, Timer},
-};
-use core::{
-    mem::MaybeUninit,
-    sync::atomic::{AtomicU8, Ordering}
 };
 
 ///Determines which mode the LED strip is in
@@ -138,11 +138,7 @@ fn EXTI4() {
     }
 }
 /// Pulses a single color, if the value of COLOR changes this will change
-fn pulse_color(
-    current_mode: u8,
-    channels: &mut PwmChannels,
-    delay: &mut Delay,
-) {
+fn pulse_color(current_mode: u8, channels: &mut PwmChannels, delay: &mut Delay) {
     let max = channels.0.get_max_duty();
     let min = 0;
     let mut duty_cycle = min;
@@ -188,11 +184,7 @@ fn pulse_color(
     channels.2.set_duty(min);
 }
 /// Changes color after every pulse, changing the value of COLOR will change immediately
-fn pulse_colors(
-    current_mode: u8,
-    channels: &mut PwmChannels,
-    delay: &mut Delay,
-) {
+fn pulse_colors(current_mode: u8, channels: &mut PwmChannels, delay: &mut Delay) {
     let max = channels.0.get_max_duty();
     let min = 0;
     let mut duty_cycle = min;
@@ -244,10 +236,7 @@ fn pulse_colors(
 }
 
 ///Display a constant color which can be adjust by the color button
-fn const_color(
-    current_mode: u8,
-    channels: &mut PwmChannels,
-) {
+fn const_color(current_mode: u8, channels: &mut PwmChannels) {
     let max = channels.0.get_max_duty();
     let min = 0;
     while MODE.load(Ordering::Relaxed) == current_mode {
@@ -271,10 +260,7 @@ fn const_color(
 }
 
 ///Display a color for approximately 10 seconds and then switch to another
-fn const_colors(
-    current_mode: u8,
-    channels: &mut PwmChannels,
-) {
+fn const_colors(current_mode: u8, channels: &mut PwmChannels) {
     let max = channels.0.get_max_duty();
     let min = 0;
     let mut ticks: u32 = 0;

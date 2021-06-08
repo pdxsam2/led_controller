@@ -101,15 +101,15 @@ fn main() -> ! {
 
     //*** LOOP ***//
     loop {
-        let mode = MODE.load(Ordering::Relaxed);
-        if mode == 3 {
-            pulse_color(mode, &mut pwm_channels, &mut delay);
-        } else if mode == 2 {
-            pulse_colors(mode, &mut pwm_channels, &mut delay);
-        } else if mode == 1 {
-            const_color(mode, &mut pwm_channels);
+        let current_mode = MODE.load(Ordering::Relaxed);
+        if current_mode == 3 {
+            pulse_color(current_mode, &mut pwm_channels, &mut delay);
+        } else if current_mode == 2 {
+            pulse_colors(current_mode, &mut pwm_channels, &mut delay);
+        } else if current_mode == 1 {
+            const_color(current_mode, &mut pwm_channels);
         } else {
-            const_colors(mode, &mut pwm_channels);
+            const_colors(current_mode, &mut pwm_channels);
         }
     }
 }
@@ -139,7 +139,7 @@ fn EXTI4() {
 }
 /// Pulses a single color, if the value of COLOR changes this will change
 fn pulse_color(
-    mode: u8,
+    current_mode: u8,
     channels: &mut PwmChannels,
     delay: &mut Delay,
 ) {
@@ -152,7 +152,7 @@ fn pulse_color(
     channels.1.set_duty(duty_cycle);
     channels.2.set_duty(duty_cycle);
 
-    while MODE.load(Ordering::Relaxed) == mode {
+    while MODE.load(Ordering::Relaxed) == current_mode {
         let color = COLOR.load(Ordering::Relaxed);
         if to_add {
             duty_cycle += 1;
@@ -189,7 +189,7 @@ fn pulse_color(
 }
 /// Changes color after every pulse, changing the value of COLOR will change immediately
 fn pulse_colors(
-    mode: u8,
+    current_mode: u8,
     channels: &mut PwmChannels,
     delay: &mut Delay,
 ) {
@@ -202,7 +202,7 @@ fn pulse_colors(
     channels.1.set_duty(duty_cycle);
     channels.2.set_duty(duty_cycle);
 
-    while MODE.load(Ordering::Relaxed) == mode {
+    while MODE.load(Ordering::Relaxed) == current_mode {
         let mut color = COLOR.load(Ordering::Relaxed);
         if to_add {
             duty_cycle += 1;
@@ -245,12 +245,12 @@ fn pulse_colors(
 
 ///Display a constant color which can be adjust by the color button
 fn const_color(
-    mode: u8,
+    current_mode: u8,
     channels: &mut PwmChannels,
 ) {
     let max = channels.0.get_max_duty();
     let min = 0;
-    while MODE.load(Ordering::Relaxed) == mode {
+    while MODE.load(Ordering::Relaxed) == current_mode {
         let color = COLOR.load(Ordering::Relaxed);
         if color & 1 == 1 {
             channels.0.set_duty(max);
@@ -272,7 +272,7 @@ fn const_color(
 
 ///Display a color for approximately 10 seconds and then switch to another
 fn const_colors(
-    mode: u8,
+    current_mode: u8,
     channels: &mut PwmChannels,
 ) {
     let max = channels.0.get_max_duty();
@@ -280,8 +280,8 @@ fn const_colors(
     let mut ticks: u32 = 0;
     let approx_second = 15000; //I timed this by hand, and I agree that it's a bad way of doing it
 
-    while MODE.load(Ordering::Relaxed) == mode {
-        while ticks < (10 * approx_second) && MODE.load(Ordering::Relaxed) == mode {
+    while MODE.load(Ordering::Relaxed) == current_mode {
+        while ticks < (10 * approx_second) && MODE.load(Ordering::Relaxed) == current_mode {
             let color = COLOR.load(Ordering::Relaxed);
             if color & 1 == 1 {
                 channels.0.set_duty(max);

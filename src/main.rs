@@ -3,14 +3,10 @@
 
 use panic_halt as _;
 //TODO:
-//  README and docs
-//  Organize things into functions?
-//  appease clippy
-//  update const_colors
+//  demo video
 //  change 'mode' to 'current_mode'
 
 use cortex_m_rt::entry;
-use cortex_m::peripheral::SYST;
 use stm32f1xx_hal::{
     delay::Delay,
     gpio::*,
@@ -42,10 +38,12 @@ static mut MODE_BUTTON: MaybeUninit<stm32f1xx_hal::gpio::gpioa::PA5<Input<Floati
 static mut COLOR_BUTTON: MaybeUninit<stm32f1xx_hal::gpio::gpioa::PA4<Input<Floating>>> =
     MaybeUninit::uninit();
 
-///Used for debugging
-static mut LED: MaybeUninit<stm32f1xx_hal::gpio::gpioc::PC13<Output<PushPull>>> =
-    MaybeUninit::uninit();
-
+///Object containing all three
+type PwmChannels = (
+    PwmChannel<TIM2, C1>,
+    PwmChannel<TIM2, C2>,
+    PwmChannel<TIM2, C3>,
+);
 
 #[entry]
 fn main() -> ! {
@@ -84,10 +82,6 @@ fn main() -> ! {
         1.khz(),
     );
 
-    let mut gpioc = p.GPIOC.split(&mut rcc.apb2);
-    let led = unsafe { &mut *LED.as_mut_ptr() };
-    *led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
-
     //*** INTERRUPTS ***//
     let mut nvic = cp.NVIC;
     unsafe {
@@ -100,7 +94,7 @@ fn main() -> ! {
     cortex_m::peripheral::NVIC::unpend(EXTI4);
 
     //*** PRIVATE VARS ***//
-    let mut pwm_channels = pwm.split();
+    let mut pwm_channels: PwmChannels = pwm.split();
     pwm_channels.0.enable();
     pwm_channels.1.enable();
     pwm_channels.2.enable();
@@ -115,7 +109,7 @@ fn main() -> ! {
         } else if mode == 1 {
             const_color(mode, &mut pwm_channels);
         } else {
-            const_colors(mode, &mut pwm_channels, &mut delay);
+            const_colors(mode, &mut pwm_channels);
         }
     }
 }
@@ -123,11 +117,9 @@ fn main() -> ! {
 #[interrupt]
 fn EXTI9_5() {
     let mut mode = MODE.load(Ordering::Relaxed);
-    let led = unsafe { &mut *LED.as_mut_ptr() };
     let mode_button = unsafe { &mut *MODE_BUTTON.as_mut_ptr() };
 
     if mode_button.check_interrupt() {
-        led.toggle().unwrap();
         mode = (mode + 1) % 4;
         MODE.store(mode, Ordering::Relaxed);
         mode_button.clear_interrupt_pending_bit();
@@ -136,12 +128,10 @@ fn EXTI9_5() {
 
 #[interrupt]
 fn EXTI4() {
-    let led = unsafe { &mut *LED.as_mut_ptr() };
     let color_button = unsafe { &mut *COLOR_BUTTON.as_mut_ptr() };
     let mut color = COLOR.load(Ordering::Relaxed);
 
     if color_button.check_interrupt() {
-        led.toggle().unwrap();
         color = (color + 1) % 8;
         COLOR.store(color, Ordering::Relaxed);
         color_button.clear_interrupt_pending_bit();
@@ -150,11 +140,7 @@ fn EXTI4() {
 /// Pulses a single color, if the value of COLOR changes this will change
 fn pulse_color(
     mode: u8,
-    channels: &mut (
-        PwmChannel<TIM2, C1>,
-        PwmChannel<TIM2, C2>,
-        PwmChannel<TIM2, C3>,
-    ),
+    channels: &mut PwmChannels,
     delay: &mut Delay,
 ) {
     let max = channels.0.get_max_duty();
@@ -204,11 +190,7 @@ fn pulse_color(
 /// Changes color after every pulse, changing the value of COLOR will change immediately
 fn pulse_colors(
     mode: u8,
-    channels: &mut (
-        PwmChannel<TIM2, C1>,
-        PwmChannel<TIM2, C2>,
-        PwmChannel<TIM2, C3>,
-    ),
+    channels: &mut PwmChannels,
     delay: &mut Delay,
 ) {
     let max = channels.0.get_max_duty();
@@ -264,11 +246,7 @@ fn pulse_colors(
 ///Display a constant color which can be adjust by the color button
 fn const_color(
     mode: u8,
-    channels: &mut (
-        PwmChannel<TIM2, C1>,
-        PwmChannel<TIM2, C2>,
-        PwmChannel<TIM2, C3>,
-    ),
+    channels: &mut PwmChannels,
 ) {
     let max = channels.0.get_max_duty();
     let min = 0;
@@ -292,36 +270,42 @@ fn const_color(
     }
 }
 
-///Display a constant color which can be adjust by the color button
-//TODO: add a delay in color change in a nonblocking way so the color button still works
+///Display a color for approximately 10 seconds and then switch to another
 fn const_colors(
     mode: u8,
-    channels: &mut (
-        PwmChannel<TIM2, C1>,
-        PwmChannel<TIM2, C2>,
-        PwmChannel<TIM2, C3>,
-    ),
-    delay: &mut Delay,
+    channels: &mut PwmChannels,
 ) {
-    // let time = SYST::get_current();
     let max = channels.0.get_max_duty();
     let min = 0;
+    let mut ticks: u32 = 0;
+    let approx_second = 15000; //I timed this by hand, and I agree that it's a bad way of doing it
+
     while MODE.load(Ordering::Relaxed) == mode {
-        let color = COLOR.load(Ordering::Relaxed);
-        if color & 1 == 1 {
-            channels.0.set_duty(max);
-        } else {
-            channels.0.set_duty(min);
+        while ticks < (10 * approx_second) && MODE.load(Ordering::Relaxed) == mode {
+            let color = COLOR.load(Ordering::Relaxed);
+            if color & 1 == 1 {
+                channels.0.set_duty(max);
+            } else {
+                channels.0.set_duty(min);
+            }
+            if color & 2 == 2 {
+                channels.1.set_duty(max);
+            } else {
+                channels.1.set_duty(min);
+            }
+            if color & 4 == 4 {
+                channels.2.set_duty(max);
+            } else {
+                channels.2.set_duty(min);
+            }
+            ticks += 1;
         }
-        if color & 2 == 2 {
-            channels.1.set_duty(max);
-        } else {
-            channels.1.set_duty(min);
+        ticks = 0;
+        let mut color = COLOR.load(Ordering::Relaxed);
+        color = (color + 1) % 8;
+        if color == 0 {
+            color += 1;
         }
-        if color & 4 == 4 {
-            channels.2.set_duty(max);
-        } else {
-            channels.2.set_duty(min);
-        }
+        COLOR.store(color, Ordering::Relaxed);
     }
 }

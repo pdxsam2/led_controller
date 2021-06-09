@@ -69,5 +69,5 @@ The original goals of the project were achieved and I'm satisified with the resu
 	I would like to add more implementation in the future. First off, I want to add a potentiometer to the system which the board can read from. This can then be used in software to adjust various parameters within the modes. For instance, for the 'pulse colors' mode I would like to adjust the speed at which it pulses. Or, for the 'constant colors' mode I would like to adjust either the brightness or the duration between color changes. 
 	On a more Rust-relevant front, however, I also want to abstract the functionality of the modes into a larger object (similar to this: https://github.com/stm32-rs/stm32f1xx-hal/blob/master/examples/timer-interrupt-rtic.rs). I think this would get me a bit deeper into how Rust objects interact with eachother and overall be a more developer-friendly design. 
   
-### [Demo Video](youtube.com)
+### [Demo Video](https://youtu.be/VHMPRguejsk)
 ###### Bug: As I was recording the demo the strip started changing modes after all of the colors were on... I spent a couple hours trying to solve this but couldn't figure it out so if you have any suggestions please let me know. 

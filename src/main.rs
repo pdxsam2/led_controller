@@ -2,9 +2,6 @@
 #![no_main]
 
 use panic_halt as _;
-//TODO:
-//  demo video
-//  change 'mode' to 'current_mode'
 
 use core::{
     mem::MaybeUninit,
@@ -38,7 +35,7 @@ static mut MODE_BUTTON: MaybeUninit<stm32f1xx_hal::gpio::gpioa::PA5<Input<Floati
 static mut COLOR_BUTTON: MaybeUninit<stm32f1xx_hal::gpio::gpioa::PA4<Input<Floating>>> =
     MaybeUninit::uninit();
 
-///Object containing all three
+///Object containing the three PWM channels
 type PwmChannels = (
     PwmChannel<TIM2, C1>,
     PwmChannel<TIM2, C2>,
@@ -114,6 +111,7 @@ fn main() -> ! {
     }
 }
 
+/// Increments the MODE value and resets the interrupt bit
 #[interrupt]
 fn EXTI9_5() {
     let mut mode = MODE.load(Ordering::Relaxed);
@@ -125,7 +123,7 @@ fn EXTI9_5() {
         mode_button.clear_interrupt_pending_bit();
     }
 }
-
+/// Increments the COLOR value and resets the interrupt bit
 #[interrupt]
 fn EXTI4() {
     let color_button = unsafe { &mut *COLOR_BUTTON.as_mut_ptr() };
@@ -183,7 +181,7 @@ fn pulse_color(current_mode: u8, channels: &mut PwmChannels, delay: &mut Delay) 
     channels.1.set_duty(min);
     channels.2.set_duty(min);
 }
-/// Changes color after every pulse, changing the value of COLOR will change immediately
+/// Changes color after every pulse
 fn pulse_colors(current_mode: u8, channels: &mut PwmChannels, delay: &mut Delay) {
     let max = channels.0.get_max_duty();
     let min = 0;
@@ -287,11 +285,13 @@ fn const_colors(current_mode: u8, channels: &mut PwmChannels) {
             ticks += 1;
         }
         ticks = 0;
-        let mut color = COLOR.load(Ordering::Relaxed);
-        color = (color + 1) % 8;
-        if color == 0 {
-            color += 1;
+        if MODE.load(Ordering::Relaxed) == current_mode {
+            let mut color = COLOR.load(Ordering::Relaxed);
+            color = (color + 1) % 8;
+            if color == 0 {
+                color += 1;
+            }
+            COLOR.store(color, Ordering::Relaxed);
         }
-        COLOR.store(color, Ordering::Relaxed);
     }
 }

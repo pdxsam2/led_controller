@@ -1,5 +1,3 @@
-To talk about:
-	- Demo video
 # Author and License
 
 Samuel Parker

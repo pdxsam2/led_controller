@@ -70,4 +70,4 @@ The original goals of the project were achieved and I'm satisified with the resu
 	On a more Rust-relevant front, however, I also want to abstract the functionality of the modes into a larger object (similar to this: https://github.com/stm32-rs/stm32f1xx-hal/blob/master/examples/timer-interrupt-rtic.rs). I think this would get me a bit deeper into how Rust objects interact with eachother and overall be a more developer-friendly design. 
   
 ### [Demo Video](https://youtu.be/VHMPRguejsk)
-###### Bug: As I was recording the demo the strip started changing modes after all of the colors were on... I spent a couple hours trying to solve this but couldn't figure it out so if you have any suggestions please let me know. 
+###### Bug: As I was recording the demo the strip started changing modes after all of the colors were on... I spent a couple hours trying to solve this but couldn't figure it out so if you have any suggestions please let me know. Update: after moving the setup the issue went away. I believe there may have been an unintended connection causing the interrupt to initiate. Still, please let me know if you see anything. 
